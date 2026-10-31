@@ -1,11 +1,13 @@
 @page "/jela"
-@inject RecipeService Recipes
 
 <PageTitle>@L["Jela"] · Ručak</PageTitle>
 
 <div class="page-head">
     <h1>@L["Jela"]</h1>
-    <a class="btn primary" href="jela/novo"><Icon Name="plus" /> @L["Novo jelo"]</a>
+    <div class="actions push-right">
+        <a class="btn" href="jela/uvoz"><Icon Name="download" Size="18" /> @L["Uvoz s weba"]</a>
+        <a class="btn primary" href="jela/novo"><Icon Name="plus" Size="18" /> @L["Novo jelo"]</a>
+    </div>
 </div>
 
 @if (error is not null)
@@ -83,51 +85,5 @@ else
     @if (!Visible.Any())
     {
         <p class="muted">@L["Nema rezultata."]</p>
-    }
-}
-
-@code {
-    private static readonly (string Value, string Label)[] Filters =
-        [("all", "Sva"), ("pool", "U skupu"), ("manual", "Moja"), ("imported", "S weba")];
-
-    private List<Recipe>? all;
-    private string query = "";
-    private string filter = "all";
-    private string? error;
-
-    private int PoolCount => all?.Count(r => r.InPool) ?? 0;
-
-    private IEnumerable<Recipe> Visible => (all ?? []).Where(r =>
-        (filter switch
-        {
-            "pool" => r.InPool,
-            "manual" => r.Source == RecipeSource.Manual,
-            "imported" => r.Source == RecipeSource.Imported,
-            _ => true,
-        })
-        && Matches(r));
-
-    private bool Matches(Recipe r) =>
-        string.IsNullOrWhiteSpace(query)
-        || r.Name.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase)
-        || r.Ingredients.Any(i => i.Name.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase));
-
-    protected override async Task OnInitializedAsync()
-    {
-        try { all = await Recipes.GetAllAsync(force: true); }
-        catch (Exception ex) { error = ex.Message; all = []; }
-    }
-
-    private async Task TogglePool(Recipe recipe, bool inPool)
-    {
-        try
-        {
-            error = null;
-            await Recipes.SetPoolAsync(recipe, inPool);
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
     }
 }

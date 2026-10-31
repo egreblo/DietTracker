@@ -1,7 +1,4 @@
 @page "/tjedan/ispis"
-@inject RecipeService Recipes
-@inject PlanService Plan
-@inject IJSRuntime JS
 
 <PageTitle>@L["Ručak"] @Fmt.WeekTitle(weekStart)</PageTitle>
 
@@ -10,6 +7,10 @@
     <label class="check">
         <input type="checkbox" @bind="showIngredients" />
         <span>@L["Prikaži sastojke"]</span>
+    </label>
+    <label class="check">
+        <input type="checkbox" @bind="showPreparation" />
+        <span>@L["Prikaži pripremu"]</span>
     </label>
     <button class="btn primary" type="button" @onclick="Print"><Icon Name="printer" Size="18" /> @L["Ispiši / spremi PDF"]</button>
 </div>
@@ -49,6 +50,15 @@ else
                                 {
                                     <div class="muted small">@string.Join(", ", recipe.Ingredients.Select(Describe))</div>
                                 }
+                                @if (showPreparation && !string.IsNullOrWhiteSpace(recipe.Instructions))
+                                {
+                                    <div class="prep-print small">
+                                        @foreach (var line in recipe.Instructions.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                                        {
+                                            <p>@line</p>
+                                        }
+                                    </div>
+                                }
                             }
                         </td>
                     </tr>
@@ -56,44 +66,4 @@ else
             </tbody>
         </table>
     </article>
-}
-
-@code {
-    [Parameter, SupplyParameterFromQuery(Name = "od")] public string? From { get; set; }
-
-    private DateOnly weekStart;
-    private List<Recipe> recipes = [];
-    private Dictionary<DateOnly, PlanEntry> entries = [];
-    private bool loading = true;
-    private bool showIngredients;
-    private string? error;
-
-    protected override async Task OnInitializedAsync()
-    {
-        if (!DateOnly.TryParseExact(From, "yyyy-MM-dd", out var start))
-            start = DateOnly.ParseExact(await JS.InvokeAsync<string>("dt.today"), "yyyy-MM-dd");
-        weekStart = Fmt.MondayOf(start);
-
-        try
-        {
-            recipes = await Recipes.GetAllAsync();
-            var list = await Plan.GetRangeAsync(weekStart, weekStart.AddDays(6));
-            entries = list.ToDictionary(e => e.Date);
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
-        loading = false;
-    }
-
-    private Recipe? RecipeFor(DateOnly day) =>
-        entries.TryGetValue(day, out var e) && e.RecipeId is { } id
-            ? recipes.FirstOrDefault(r => r.Id == id)
-            : null;
-
-    private static string Describe(Ingredient i) =>
-        i.Grams is { } g ? $"{i.Name} ({Fmt.Number(g)} g)" : i.Name;
-
-    private Task Print() => JS.InvokeVoidAsync("dt.print").AsTask();
 }

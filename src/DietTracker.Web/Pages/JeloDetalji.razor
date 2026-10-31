@@ -1,0 +1,93 @@
+@page "/jela/{Id:guid}"
+
+<PageTitle>@(recipe?.Name ?? L["Jelo"]) · Ručak</PageTitle>
+
+<div class="page-head">
+    <a class="icon-btn" href="jela" aria-label="@L["Natrag"]"><Icon Name="chevron-left" /></a>
+    <h1>@(recipe?.Name ?? L["Jelo"])</h1>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert" role="alert">@error</div>
+}
+
+@if (recipe is null)
+{
+    <p class="muted">@(notFound ? L["Jelo nije pronađeno."] : L["Učitavanje…"])</p>
+}
+else
+{
+    <article class="stack">
+        @if (!string.IsNullOrWhiteSpace(recipe.ImageUrl))
+        {
+            <img class="hero" src="@recipe.ImageUrl" alt="" loading="lazy" referrerpolicy="no-referrer" />
+        }
+
+        <div class="detail-meta">
+            @if (recipe.Source == RecipeSource.Imported)
+            {
+                <span class="badge web">@L["S weba"]</span>
+            }
+            else
+            {
+                <span class="badge">@L["Moje"]</span>
+            }
+            <span class="muted small">@L["Porcije: {0}", recipe.Servings]</span>
+            <label class="switch push-right" title="@L["U skupu"]">
+                <input type="checkbox" checked="@recipe.InPool" @onchange="e => TogglePool((bool)e.Value!)" />
+                <span class="track"></span>
+                <span class="sr-only">@L["U skupu"]</span>
+            </label>
+        </div>
+
+        @if (recipe.Kcal is not null || recipe.Protein is not null || recipe.Carbs is not null || recipe.Fat is not null)
+        {
+            <section class="card">
+                <h2>@L["Po porciji"] @if (recipe.MacrosEstimated) { <span class="badge">@L["procjena"]</span> }</h2>
+                <dl class="macros">
+                    @if (recipe.Kcal is { } kcal) { <div><dt>kcal</dt><dd>@Fmt.Number(kcal)</dd></div> }
+                    @if (recipe.Protein is { } p) { <div><dt>@L["Proteini"]</dt><dd>@Fmt.Number(p) g</dd></div> }
+                    @if (recipe.Carbs is { } c) { <div><dt>@L["Ugljikohidrati"]</dt><dd>@Fmt.Number(c) g</dd></div> }
+                    @if (recipe.Fat is { } f) { <div><dt>@L["Masti"]</dt><dd>@Fmt.Number(f) g</dd></div> }
+                </dl>
+            </section>
+        }
+
+        @if (recipe.Ingredients.Count > 0)
+        {
+            <section class="card stack">
+                <h2>@L["Sastojci"]</h2>
+                <ul class="ingredients">
+                    @foreach (var ing in recipe.Ingredients)
+                    {
+                        <li>
+                            <span>@ing.Name</span>
+                            <span class="muted">@Quantity(ing)</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(recipe.Instructions))
+        {
+            <section class="card stack">
+                <h2>@L["Priprema"]</h2>
+                @foreach (var paragraph in Paragraphs(recipe.Instructions))
+                {
+                    <p class="prep">@paragraph</p>
+                }
+            </section>
+        }
+
+        @if (IsHttpUrl(recipe.LinkUrl))
+        {
+            <p><a class="btn" href="@recipe.LinkUrl" target="_blank" rel="noopener noreferrer"><Icon Name="link" Size="18" /> @LinkLabel(recipe.LinkUrl!)</a></p>
+        }
+
+        <div class="actions">
+            <a class="btn" href="jela/@recipe.Id/uredi">@L["Uredi"]</a>
+        </div>
+    </article>
+}

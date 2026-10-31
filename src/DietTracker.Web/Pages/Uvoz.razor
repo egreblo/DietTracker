@@ -1,0 +1,92 @@
+@page "/jela/uvoz"
+
+<PageTitle>@L["Uvoz s weba"] · Ručak</PageTitle>
+
+<div class="page-head">
+    <a class="icon-btn" href="jela" aria-label="@L["Natrag"]"><Icon Name="chevron-left" /></a>
+    <h1>@L["Uvoz s weba"]</h1>
+</div>
+
+<p class="muted">@L["Popularna jela iz TheMealDB. Sadržaj je na engleskom; jela se spremaju kao „S weba” i možeš ih urediti."]</p>
+
+<form class="search-row" @onsubmit="SearchAsync">
+    <div class="search">
+        <Icon Name="search" Size="18" />
+        <input type="search" placeholder="@L["Pretraži (npr. chicken, pasta, soup)"]" @bind="query" />
+    </div>
+    <button class="btn primary" type="submit" disabled="@busy">@L["Traži"]</button>
+</form>
+
+<div class="toolbar">
+    <button class="btn" type="button" disabled="@busy" @onclick="RandomAsync"><Icon Name="shuffle" Size="18" /> @L["Iznenadi me"]</button>
+    <select class="inline-select" aria-label="@L["Kategorija"]" disabled="@busy" @onchange="e => CategoryAsync(e.Value?.ToString())">
+        <option value="">@L["Kategorija…"]</option>
+        @foreach (var c in categories)
+        {
+            <option value="@c">@c</option>
+        }
+    </select>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert" role="alert">@error</div>
+}
+
+@if (busy)
+{
+    <p class="muted">@L["Učitavanje…"]</p>
+}
+else if (results is not null)
+{
+    @if (results.Count == 0)
+    {
+        <p class="muted">@L["Nema rezultata."]</p>
+    }
+    else
+    {
+        <div class="page-head">
+            <p class="muted grow">@L["Pronađeno: {0}", results.Count]</p>
+            <button class="btn primary" type="button" disabled="@(saving || NewCount == 0)" @onclick="AddAllAsync">
+                <Icon Name="plus" Size="18" /> @L["Dodaj sve ({0})", NewCount]
+            </button>
+        </div>
+
+        <ul class="list">
+            @foreach (var meal in results)
+            {
+                var r = meal.Recipe;
+                var added = IsAdded(r);
+                <li class="card import-card">
+                    @if (r.ImageUrl is not null)
+                    {
+                        <img class="thumb" src="@r.ImageUrl/small" alt="" loading="lazy" referrerpolicy="no-referrer" />
+                    }
+                    <div class="import-main">
+                        <span class="recipe-name">@r.Name</span>
+                        <span class="recipe-meta">
+                            <span class="badge web">@L["S weba"]</span>
+                            @if (meal.Category is not null) { <span>@meal.Category</span> }
+                            @if (meal.Area is not null) { <span>· @meal.Area</span> }
+                            @if (r.Kcal is not null) { <span>· ~@Fmt.Number(r.Kcal.Value) kcal</span> }
+                        </span>
+                        <details>
+                            <summary>@L["Sastojci ({0})", r.Ingredients.Count]</summary>
+                            <p class="small muted">@string.Join(", ", r.Ingredients.Select(i => i.Name))</p>
+                        </details>
+                    </div>
+                    @if (added)
+                    {
+                        <span class="muted small added"><Icon Name="check" Size="16" /> @L["Dodano"]</span>
+                    }
+                    else
+                    {
+                        <button class="btn" type="button" disabled="@saving" @onclick="() => AddAsync(r)">
+                            <Icon Name="plus" Size="18" /> @L["Dodaj"]
+                        </button>
+                    }
+                </li>
+            }
+        </ul>
+    }
+}

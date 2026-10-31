@@ -23,6 +23,14 @@ public class RecipeService(SupabaseApi api)
         _cache = null;
     }
 
+    /// <summary>Bulk insert (used by the web import).</summary>
+    public async Task SaveManyAsync(List<Recipe> recipes)
+    {
+        if (recipes.Count == 0) return;
+        await api.WriteAsync(HttpMethod.Post, "rest/v1/recipes", recipes, "resolution=merge-duplicates,return=minimal");
+        _cache = null;
+    }
+
     public async Task SetPoolAsync(Recipe recipe, bool inPool)
     {
         await api.WriteAsync(HttpMethod.Patch, $"rest/v1/recipes?id=eq.{recipe.Id}",

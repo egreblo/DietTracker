@@ -15,6 +15,7 @@ builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<SupabaseApi>();
 builder.Services.AddSingleton<RecipeService>();
 builder.Services.AddSingleton<PlanService>();
+builder.Services.AddSingleton<MealDbService>();
 builder.Services.AddSingleton<ThemeService>();
 builder.Services.AddSingleton<Loc>();
 

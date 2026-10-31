@@ -1,8 +1,5 @@
 @page "/login"
 @layout LoginLayout
-@inject AuthService Auth
-@inject SupabaseSettings Settings
-@inject NavigationManager Nav
 
 <PageTitle>@L["Prijava"] · Ručak</PageTitle>
 
@@ -33,25 +30,3 @@
         @(busy ? L["Prijava…"] : L["Prijavi se"])
     </button>
 </form>
-
-@code {
-    private string email = "";
-    private string password = "";
-    private string? error;
-    private bool busy;
-
-    protected override void OnInitialized()
-    {
-        if (Auth.IsSignedIn) Nav.NavigateTo("", replace: true);
-    }
-
-    private async Task SubmitAsync()
-    {
-        busy = true;
-        error = null;
-        var (ok, message) = await Auth.SignInAsync(email, password);
-        busy = false;
-        if (ok) Nav.NavigateTo("", replace: true);
-        else error = message;
-    }
-}

@@ -1,6 +1,4 @@
 @page "/postavke"
-@inject AuthService Auth
-@inject ThemeService Theme
 
 <PageTitle>@L["Postavke"] · Ručak</PageTitle>
 
@@ -22,18 +20,3 @@
     <p class="muted">@L["Prijavljen/a kao"] <strong>@Auth.Email</strong></p>
     <div><button class="btn" @onclick="Auth.SignOutAsync"><Icon Name="logout" /> @L["Odjava"]</button></div>
 </section>
-
-@code {
-    private static readonly (string Value, string Label)[] Options =
-        [("system", "Sustav"), ("light", "Svijetla"), ("dark", "Tamna")];
-
-    private string theme = "system";
-
-    protected override async Task OnInitializedAsync() => theme = await Theme.GetAsync();
-
-    private async Task SetTheme(string value)
-    {
-        theme = value;
-        await Theme.SetAsync(value);
-    }
-}

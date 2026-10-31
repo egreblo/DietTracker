@@ -1,12 +1,10 @@
 @page "/jela/novo"
-@page "/jela/{Id:guid}"
-@inject RecipeService Recipes
-@inject NavigationManager Nav
+@page "/jela/{Id:guid}/uredi"
 
 <PageTitle>@(IsNew ? L["Novo jelo"] : recipe?.Name ?? L["Jelo"]) · Ručak</PageTitle>
 
 <div class="page-head">
-    <a class="icon-btn" href="jela" aria-label="@L["Natrag"]"><Icon Name="chevron-left" /></a>
+    <a class="icon-btn" href="@(IsNew ? "jela" : $"jela/{Id}")" aria-label="@L["Natrag"]"><Icon Name="chevron-left" /></a>
     <h1>@(IsNew ? L["Novo jelo"] : L["Uredi jelo"])</h1>
 </div>
 
@@ -32,13 +30,19 @@ else
             <span>@L["U skupu za generiranje tjedna"]</span>
         </label>
 
+        <label class="field narrow">
+            <span>@L["Broj porcija"]</span>
+            <input type="number" min="1" step="1" inputmode="numeric" @bind="recipe.Servings" />
+        </label>
+
         <fieldset class="field">
             <legend>@L["Sastojci"]</legend>
             @foreach (var ing in recipe.Ingredients)
             {
                 <div class="ingredient-row">
-                    <input type="text" placeholder="@L["Sastojak"]" aria-label="@L["Sastojak"]" @bind="ing.Name" />
+                    <input class="ing-name" type="text" placeholder="@L["Sastojak"]" aria-label="@L["Sastojak"]" @bind="ing.Name" />
                     <input type="number" min="0" step="any" inputmode="decimal" placeholder="g" aria-label="@L["Grama"]" @bind="ing.Grams" />
+                    <input type="text" placeholder="@L["mjera (npr. 2 žlice)"]" aria-label="@L["Mjera"]" @bind="ing.Note" />
                     <button type="button" class="icon-btn" aria-label="@L["Ukloni sastojak"]" @onclick="() => recipe.Ingredients.Remove(ing)">
                         <Icon Name="x" Size="18" />
                     </button>
@@ -62,12 +66,22 @@ else
         </label>
 
         <fieldset class="field">
-            <legend>@L["Nutritivne vrijednosti po porciji (opcionalno)"]</legend>
+            <legend>
+                @L["Nutritivne vrijednosti po porciji (opcionalno)"]
+                @if (recipe.MacrosEstimated) { <span class="badge">@L["procjena"]</span> }
+            </legend>
             <div class="macro-grid">
-                <label><span>kcal</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Kcal" /></label>
-                <label><span>@L["Proteini (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Protein" /></label>
-                <label><span>@L["Ugljikohidrati (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Carbs" /></label>
-                <label><span>@L["Masti (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Fat" /></label>
+                <label><span>kcal</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Kcal" @bind:after="MacrosEdited" /></label>
+                <label><span>@L["Proteini (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Protein" @bind:after="MacrosEdited" /></label>
+                <label><span>@L["Ugljikohidrati (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Carbs" @bind:after="MacrosEdited" /></label>
+                <label><span>@L["Masti (g)"]</span><input type="number" min="0" step="any" inputmode="decimal" @bind="recipe.Fat" @bind:after="MacrosEdited" /></label>
+            </div>
+            <div class="estimate">
+                <button type="button" class="btn" @onclick="EstimateMacros"><Icon Name="shuffle" Size="18" /> @L["Procijeni iz sastojaka"]</button>
+                @if (estimateMessage is not null)
+                {
+                    <p class="small muted">@estimateMessage</p>
+                }
             </div>
         </fieldset>
 
@@ -78,7 +92,7 @@ else
 
         <div class="actions">
             <button class="btn primary" type="submit" disabled="@busy">@(busy ? L["Spremanje…"] : L["Spremi"])</button>
-            <a class="btn" href="jela">@L["Odustani"]</a>
+            <a class="btn" href="@(IsNew ? "jela" : $"jela/{Id}")">@L["Odustani"]</a>
             @if (!IsNew)
             {
                 @if (!confirmDelete)
@@ -92,89 +106,4 @@ else
             }
         </div>
     </form>
-}
-
-@code {
-    [Parameter] public Guid? Id { get; set; }
-
-    private Recipe? recipe;
-    private bool notFound;
-    private bool busy;
-    private bool confirmDelete;
-    private string? error;
-
-    private bool IsNew => Id is null;
-
-    protected override async Task OnParametersSetAsync()
-    {
-        recipe = null;
-        notFound = false;
-        confirmDelete = false;
-        error = null;
-
-        if (Id is null)
-        {
-            recipe = new Recipe { Ingredients = [new Ingredient()] };
-            return;
-        }
-
-        try
-        {
-            recipe = await Recipes.GetAsync(Id.Value);
-            notFound = recipe is null;
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-            notFound = true;
-        }
-    }
-
-    private void AddIngredient() => recipe!.Ingredients.Add(new Ingredient());
-
-    private static bool IsHttpUrl(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
-
-    private async Task SaveAsync()
-    {
-        if (recipe is null) return;
-        if (string.IsNullOrWhiteSpace(recipe.Name))
-        {
-            error = L["Unesi naziv jela."];
-            return;
-        }
-
-        recipe.Name = recipe.Name.Trim();
-        recipe.Ingredients = recipe.Ingredients.Where(i => !string.IsNullOrWhiteSpace(i.Name)).ToList();
-        recipe.Instructions = Blank(recipe.Instructions);
-        recipe.LinkUrl = Blank(recipe.LinkUrl);
-        if (recipe.LinkUrl is not null && !IsHttpUrl(recipe.LinkUrl))
-        {
-            error = L["Link mora početi s http:// ili https://."];
-            return;
-        }
-
-        await RunAsync(async () =>
-        {
-            await Recipes.SaveAsync(recipe);
-            Nav.NavigateTo("jela");
-        });
-    }
-
-    private Task DeleteAsync() => RunAsync(async () =>
-    {
-        await Recipes.DeleteAsync(recipe!.Id);
-        Nav.NavigateTo("jela");
-    });
-
-    private async Task RunAsync(Func<Task> action)
-    {
-        busy = true;
-        error = null;
-        try { await action(); }
-        catch (Exception ex) { error = ex.Message; }
-        finally { busy = false; }
-    }
-
-    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }
