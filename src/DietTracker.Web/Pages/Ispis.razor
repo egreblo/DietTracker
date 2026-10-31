@@ -1,0 +1,99 @@
+@page "/tjedan/ispis"
+@inject RecipeService Recipes
+@inject PlanService Plan
+@inject IJSRuntime JS
+
+<PageTitle>@L["Ručak"] @Fmt.WeekTitle(weekStart)</PageTitle>
+
+<div class="toolbar no-print">
+    <a class="btn" href=""><Icon Name="chevron-left" Size="18" /> @L["Natrag"]</a>
+    <label class="check">
+        <input type="checkbox" @bind="showIngredients" />
+        <span>@L["Prikaži sastojke"]</span>
+    </label>
+    <button class="btn primary" type="button" @onclick="Print"><Icon Name="printer" Size="18" /> @L["Ispiši / spremi PDF"]</button>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert" role="alert">@error</div>
+}
+
+@if (loading)
+{
+    <p class="muted">@L["Učitavanje…"]</p>
+}
+else
+{
+    <article class="sheet">
+        <h1>@L["Ručak"] · @Fmt.WeekTitle(weekStart)</h1>
+        <table class="plan-table">
+            <tbody>
+                @foreach (var day in Enumerable.Range(0, 7).Select(weekStart.AddDays))
+                {
+                    var recipe = RecipeFor(day);
+                    <tr>
+                        <th scope="row">
+                            <span class="day-name">@Fmt.DayName(day)</span>
+                            <span class="day-date">@Fmt.ShortDate(day)</span>
+                        </th>
+                        <td>
+                            @if (recipe is null)
+                            {
+                                <span class="muted">—</span>
+                            }
+                            else
+                            {
+                                <strong>@recipe.Name</strong>
+                                @if (showIngredients && recipe.Ingredients.Count > 0)
+                                {
+                                    <div class="muted small">@string.Join(", ", recipe.Ingredients.Select(Describe))</div>
+                                }
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </article>
+}
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "od")] public string? From { get; set; }
+
+    private DateOnly weekStart;
+    private List<Recipe> recipes = [];
+    private Dictionary<DateOnly, PlanEntry> entries = [];
+    private bool loading = true;
+    private bool showIngredients;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!DateOnly.TryParseExact(From, "yyyy-MM-dd", out var start))
+            start = DateOnly.ParseExact(await JS.InvokeAsync<string>("dt.today"), "yyyy-MM-dd");
+        weekStart = Fmt.MondayOf(start);
+
+        try
+        {
+            recipes = await Recipes.GetAllAsync();
+            var list = await Plan.GetRangeAsync(weekStart, weekStart.AddDays(6));
+            entries = list.ToDictionary(e => e.Date);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        loading = false;
+    }
+
+    private Recipe? RecipeFor(DateOnly day) =>
+        entries.TryGetValue(day, out var e) && e.RecipeId is { } id
+            ? recipes.FirstOrDefault(r => r.Id == id)
+            : null;
+
+    private static string Describe(Ingredient i) =>
+        i.Grams is { } g ? $"{i.Name} ({Fmt.Number(g)} g)" : i.Name;
+
+    private Task Print() => JS.InvokeVoidAsync("dt.print").AsTask();
+}

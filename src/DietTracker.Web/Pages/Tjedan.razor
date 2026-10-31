@@ -1,0 +1,381 @@
+@page "/"
+@inject RecipeService Recipes
+@inject PlanService Plan
+@inject IJSRuntime JS
+
+<PageTitle>@L["Tjedan"] · Ručak</PageTitle>
+
+<div class="week-nav" hidden="@(today == default)">
+    <button class="icon-btn" type="button" @onclick="() => ShiftWeek(-1)" aria-label="@L["Prethodni tjedan"]"><Icon Name="chevron-left" /></button>
+    <div class="week-title">
+        <h1>@Fmt.WeekTitle(weekStart)</h1>
+        @if (weekStart != Fmt.MondayOf(today))
+        {
+            <button class="link" type="button" @onclick="ThisWeek">@L["Ovaj tjedan"]</button>
+        }
+    </div>
+    <button class="icon-btn" type="button" @onclick="() => ShiftWeek(1)" aria-label="@L["Sljedeći tjedan"]"><Icon Name="chevron-right" /></button>
+</div>
+
+@if (loading)
+{
+    <p class="muted">@L["Učitavanje…"]</p>
+}
+else
+{
+    @if (error is not null)
+    {
+        <div class="alert" role="alert">@error</div>
+    }
+
+    <div class="toolbar no-print">
+        <button class="btn primary" type="button" @onclick="OnGenerateClick" disabled="@(busy || pool.Count == 0)">
+            <Icon Name="shuffle" Size="18" /> @L["Generiraj tjedan"]
+        </button>
+        <a class="btn" href="tjedan/ispis?od=@Fmt.Iso(weekStart)"><Icon Name="printer" Size="18" /> @L["Ispis / PDF"]</a>
+        <button class="btn" type="button" @onclick="DownloadIcs" disabled="@(!entries.Values.Any(e => e.RecipeId is not null))">
+            <Icon Name="download" Size="18" /> @L["Kalendar (.ics)"]
+        </button>
+    </div>
+
+    @if (confirmGenerate)
+    {
+        <div class="alert info" role="alert">
+            <span>@L["Ovo zamjenjuje {0} jela. Zaključani dani ostaju.", unlockedWithRecipe]</span>
+            <span class="actions">
+                <button class="btn primary" type="button" @onclick="GenerateAsync">@L["Zamijeni"]</button>
+                <button class="btn" type="button" @onclick="() => confirmGenerate = false">@L["Odustani"]</button>
+            </span>
+        </div>
+    }
+
+    @if (pool.Count == 0)
+    {
+        <div class="empty">
+            <p>@L["Skup jela je prazan. Dodaj jela i uključi ih u skup da bi se mogao generirati tjedan."]</p>
+            <a class="btn primary" href="jela"><Icon Name="book" Size="18" /> @L["Idi na jela"]</a>
+        </div>
+    }
+
+    @if (swapFrom is not null)
+    {
+        <div class="alert info" role="status">
+            <span>@L["Odaberi dan s kojim mijenjaš {0}.", Fmt.DayName(swapFrom.Value)]</span>
+            <button class="btn" type="button" @onclick="() => swapFrom = null">@L["Odustani"]</button>
+        </div>
+    }
+
+    <ul class="days">
+        @foreach (var day in Days)
+        {
+            var entry = Entry(day);
+            var r = RecipeOf(entry);
+            var isToday = day == today;
+            <li class="card day @(isToday ? "today" : "") @(swapFrom == day ? "swapping" : "")">
+                <div class="day-label">
+                    <span class="day-name">@Fmt.DayName(day)</span>
+                    <span class="day-date">@Fmt.ShortDate(day)</span>
+                </div>
+
+                <div class="day-body">
+                    @if (r is not null)
+                    {
+                        <a class="day-recipe" href="jela/@r.Id">@r.Name</a>
+                        @if (r.Kcal is not null)
+                        {
+                            <span class="muted small">@Fmt.Number(r.Kcal.Value) kcal</span>
+                        }
+                    }
+                    else if (entry?.Locked == true)
+                    {
+                        <span class="muted">@L["Bez ručka"]</span>
+                    }
+                    else
+                    {
+                        <span class="muted">@L["Nije odabrano"]</span>
+                    }
+                </div>
+
+                <div class="day-actions no-print">
+                    @if (entry?.Locked != true || r is not null)
+                    {
+                        <select aria-label="@L["Odaberi jelo za {0}", Fmt.DayName(day)]" disabled="@busy"
+                                @onchange="e => SetRecipeAsync(day, e.Value?.ToString())">
+                            <option value="" selected="@(r is null)">@L["— odaberi —"]</option>
+                            @foreach (var option in OptionsFor(r))
+                            {
+                                <option value="@option.Id" selected="@(option.Id == r?.Id)">@option.Name</option>
+                            }
+                        </select>
+                    }
+                    @if (r is not null || entry is null || entry.Locked == false)
+                    {
+                        <button class="icon-btn" type="button" disabled="@(busy || pool.Count == 0 || entry?.Locked == true)"
+                                title="@L["Nasumično jelo"]" aria-label="@L["Nasumično jelo"]" @onclick="() => RerollAsync(day)">
+                            <Icon Name="shuffle" Size="18" />
+                        </button>
+                    }
+                    <button class="icon-btn @(swapFrom == day ? "active" : "")" type="button" disabled="@busy"
+                            title="@L["Zamijeni dane"]" aria-label="@L["Zamijeni dane"]" @onclick="() => SwapClickAsync(day)">
+                        <Icon Name="swap" Size="18" />
+                    </button>
+                    @if (r is not null)
+                    {
+                        <button class="icon-btn @(entry!.Locked ? "active" : "")" type="button" disabled="@busy"
+                                title="@(entry.Locked ? L["Otključaj"] : L["Zaključaj"])"
+                                aria-label="@(entry.Locked ? L["Otključaj"] : L["Zaključaj"])" aria-pressed="@entry.Locked"
+                                @onclick="() => ToggleLockAsync(day)">
+                            <Icon Name="@(entry.Locked ? "lock" : "unlock")" Size="18" />
+                        </button>
+                        <button class="icon-btn" type="button" disabled="@busy"
+                                title="@L["Ukloni jelo"]" aria-label="@L["Ukloni jelo"]" @onclick="() => ClearAsync(day)">
+                            <Icon Name="trash" Size="18" />
+                        </button>
+                    }
+                    else if (entry?.Locked == true)
+                    {
+                        <button class="icon-btn active" type="button" disabled="@busy"
+                                title="@L["Vrati dan"]" aria-label="@L["Vrati dan"]" @onclick="() => ClearAsync(day)">
+                            <Icon Name="ban" Size="18" />
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="icon-btn" type="button" disabled="@busy"
+                                title="@L["Bez ručka"]" aria-label="@L["Bez ručka"]" @onclick="() => SkipAsync(day)">
+                            <Icon Name="ban" Size="18" />
+                        </button>
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private DateOnly today;
+    private DateOnly weekStart;
+    private List<Recipe> recipes = [];
+    private List<Recipe> pool = [];
+    private Dictionary<DateOnly, PlanEntry> entries = [];
+    private List<Guid> lastWeek = [];
+
+    private bool loading = true;
+    private bool busy;
+    private bool confirmGenerate;
+    private DateOnly? swapFrom;
+    private string? error;
+
+    private IEnumerable<DateOnly> Days => Enumerable.Range(0, 7).Select(weekStart.AddDays);
+
+    private int unlockedWithRecipe =>
+        entries.Values.Count(e => !e.Locked && e.RecipeId is not null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var iso = await JS.InvokeAsync<string>("dt.today");
+        today = DateOnly.ParseExact(iso, "yyyy-MM-dd");
+        weekStart = Fmt.MondayOf(today);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        swapFrom = null;
+        confirmGenerate = false;
+        try
+        {
+            recipes = await Recipes.GetAllAsync(force: true);
+            pool = recipes.Where(r => r.InPool).ToList();
+            var thisWeek = await Plan.GetRangeAsync(weekStart, weekStart.AddDays(6));
+            entries = thisWeek.ToDictionary(e => e.Date);
+            var previous = await Plan.GetRangeAsync(weekStart.AddDays(-7), weekStart.AddDays(-1));
+            lastWeek = previous.Where(e => e.RecipeId is not null).Select(e => e.RecipeId!.Value).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            entries = [];
+        }
+        loading = false;
+    }
+
+    private Task ShiftWeek(int weeks)
+    {
+        weekStart = weekStart.AddDays(7 * weeks);
+        return LoadAsync();
+    }
+
+    private Task ThisWeek()
+    {
+        weekStart = Fmt.MondayOf(today);
+        return LoadAsync();
+    }
+
+    private PlanEntry? Entry(DateOnly day) => entries.GetValueOrDefault(day);
+
+    private Recipe? RecipeOf(PlanEntry? e) =>
+        e?.RecipeId is { } id ? recipes.FirstOrDefault(r => r.Id == id) : null;
+
+    /// <summary>Pool recipes plus the one currently scheduled (it may have left the pool since).</summary>
+    private IEnumerable<Recipe> OptionsFor(Recipe? current) =>
+        recipes.Where(r => r.InPool || r.Id == current?.Id).OrderBy(r => r.Name);
+
+    private PlanEntry Draft(DateOnly day) =>
+        entries.TryGetValue(day, out var e) ? e.Clone() : new PlanEntry { Date = day };
+
+    private IEnumerable<Guid> UsedInWeek() =>
+        entries.Values.Select(e => e.RecipeId).OfType<Guid>();
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        busy = true;
+        error = null;
+        try { await action(); }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private Task SaveAsync(params PlanEntry[] changed) => RunAsync(async () =>
+    {
+        await Plan.UpsertAsync(changed.ToList());
+        foreach (var e in changed) entries[e.Date] = e;
+    });
+
+    private Task OnGenerateClick()
+    {
+        if (unlockedWithRecipe > 0)
+        {
+            confirmGenerate = true;
+            return Task.CompletedTask;
+        }
+        return GenerateAsync();
+    }
+
+    private Task GenerateAsync()
+    {
+        confirmGenerate = false;
+        return RunAsync(async () =>
+        {
+            var lockedDays = Days.Where(d => entries.TryGetValue(d, out var e) && e.Locked).ToHashSet();
+            var toFill = Days.Where(d => !lockedDays.Contains(d)).ToList();
+            var usedByLocked = lockedDays.Select(d => entries[d].RecipeId).OfType<Guid>();
+
+            var picks = MealGenerator.Generate(pool, toFill, usedByLocked, lastWeek, Random.Shared);
+
+            var batch = toFill.Where(picks.ContainsKey).Select(d =>
+            {
+                var e = Draft(d);
+                e.RecipeId = picks[d];
+                return e;
+            }).ToList();
+
+            await Plan.UpsertAsync(batch);
+            foreach (var e in batch) entries[e.Date] = e;
+        });
+    }
+
+    private Task RerollAsync(DateOnly day)
+    {
+        var e = Draft(day);
+        var pick = MealGenerator.PickReplacement(pool, UsedInWeek(), e.RecipeId, Random.Shared);
+        if (pick is null) return Task.CompletedTask;
+        e.RecipeId = pick;
+        return SaveAsync(e);
+    }
+
+    private Task SetRecipeAsync(DateOnly day, string? value)
+    {
+        var e = Draft(day);
+        if (Guid.TryParse(value, out var id))
+        {
+            e.RecipeId = id;
+        }
+        else
+        {
+            // "— odaberi —" clears a recipe but keeps a locked "no lunch" day as it is.
+            if (e.Locked && e.RecipeId is null) return Task.CompletedTask;
+            return ClearAsync(day);
+        }
+        return SaveAsync(e);
+    }
+
+    private Task ToggleLockAsync(DateOnly day)
+    {
+        var e = Draft(day);
+        e.Locked = !e.Locked;
+        return SaveAsync(e);
+    }
+
+    private Task SkipAsync(DateOnly day)
+    {
+        var e = Draft(day);
+        e.RecipeId = null;
+        e.Locked = true;
+        return SaveAsync(e);
+    }
+
+    private Task ClearAsync(DateOnly day)
+    {
+        if (!entries.TryGetValue(day, out var existing)) return Task.CompletedTask;
+        return RunAsync(async () =>
+        {
+            await Plan.DeleteAsync(existing.Id);
+            entries.Remove(day);
+        });
+    }
+
+    private Task SwapClickAsync(DateOnly day)
+    {
+        if (swapFrom is null)
+        {
+            swapFrom = day;
+            return Task.CompletedTask;
+        }
+        if (swapFrom == day)
+        {
+            swapFrom = null;
+            return Task.CompletedTask;
+        }
+
+        var a = Draft(swapFrom.Value);
+        var b = Draft(day);
+        (a.RecipeId, b.RecipeId) = (b.RecipeId, a.RecipeId);
+        swapFrom = null;
+        return SaveAsync(a, b);
+    }
+
+    private async Task DownloadIcs()
+    {
+        var events = Days
+            .Select(d => (Day: d, Entry: Entry(d)))
+            .Where(x => x.Entry?.RecipeId is not null)
+            .Select(x => (x.Day, x.Entry, Recipe: RecipeOf(x.Entry)))
+            .Where(x => x.Recipe is not null)
+            .Select(x => new IcsEvent(
+                $"{x.Entry!.Id}@diettracker",
+                x.Day,
+                new TimeOnly(12, 0),
+                TimeSpan.FromHours(1),
+                $"RUČAK - {x.Recipe!.Name}",
+                Describe(x.Recipe)))
+            .ToList();
+
+        if (events.Count == 0) return;
+
+        var ics = IcsBuilder.Build(events, DateTime.UtcNow);
+        await JS.InvokeVoidAsync("dt.download", $"rucak-{Fmt.Iso(weekStart)}.ics", ics, "text/calendar;charset=utf-8");
+    }
+
+    private static string Describe(Recipe r)
+    {
+        var parts = new List<string>();
+        if (r.Ingredients.Count > 0)
+            parts.Add("Sastojci: " + string.Join(", ", r.Ingredients.Select(i => i.Name)));
+        if (!string.IsNullOrWhiteSpace(r.LinkUrl))
+            parts.Add(r.LinkUrl);
+        return string.Join("\n", parts);
+    }
+}

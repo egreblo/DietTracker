@@ -1,0 +1,63 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test tests/DietTracker.Tests --configuration Release
+
+      - name: Write Supabase settings
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY" || { echo "::error::Set SUPABASE_URL and SUPABASE_ANON_KEY repository secrets"; exit 1; }
+          jq -n --arg url "$SUPABASE_URL" --arg key "$SUPABASE_ANON_KEY" \
+            '{Supabase: {Url: $url, AnonKey: $key}}' > src/DietTracker.Web/wwwroot/appsettings.json
+
+      - name: Publish
+        run: dotnet publish src/DietTracker.Web --configuration Release --output out
+
+      - name: Prepare for GitHub Pages
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}"
+          # <user>.github.io repositories are served from the root, every other repository from /<repo>/
+          if [[ "$REPO" == *.github.io ]]; then BASE="/"; else BASE="/$REPO/"; fi
+          sed -i "s|<base href=\"/\" />|<base href=\"$BASE\" />|" out/wwwroot/index.html
+          cp out/wwwroot/index.html out/wwwroot/404.html   # SPA deep links (e.g. /jela/novo) fall back to the app
+          touch out/wwwroot/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out/wwwroot
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

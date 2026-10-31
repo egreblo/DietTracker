@@ -1,0 +1,8 @@
+bin/
+obj/
+out/
+.vs/
+*.user
+
+# Local Supabase settings (the deployed ones come from repository secrets)
+src/DietTracker.Web/wwwroot/appsettings.Development.json

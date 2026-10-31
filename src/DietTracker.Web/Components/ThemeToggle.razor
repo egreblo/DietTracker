@@ -1,0 +1,22 @@
+@inject ThemeService Theme
+
+<button class="icon-btn" type="button" @onclick="Toggle" title="@L["Promijeni temu"]" aria-label="@L["Promijeni temu"]">
+    <Icon Name="@(resolved == "dark" ? "sun" : "moon")" />
+</button>
+
+@code {
+    private string resolved = "light";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        resolved = await Theme.GetResolvedAsync();
+        StateHasChanged();
+    }
+
+    private async Task Toggle()
+    {
+        resolved = resolved == "dark" ? "light" : "dark";
+        await Theme.SetAsync(resolved);
+    }
+}

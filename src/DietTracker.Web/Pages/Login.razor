@@ -1,0 +1,57 @@
+@page "/login"
+@layout LoginLayout
+@inject AuthService Auth
+@inject SupabaseSettings Settings
+@inject NavigationManager Nav
+
+<PageTitle>@L["Prijava"] · Ručak</PageTitle>
+
+<form class="login-card" @onsubmit="SubmitAsync">
+    <h1>Ručak</h1>
+    <p class="muted">@L["Planer ručkova za dvoje."]</p>
+
+    @if (!Settings.IsConfigured)
+    {
+        <div class="alert">@L["Aplikacija nije konfigurirana (nedostaje Supabase adresa ili ključ)."]</div>
+    }
+
+    <label class="field">
+        <span>@L["Email"]</span>
+        <input type="email" name="email" autocomplete="username" required @bind="email" />
+    </label>
+    <label class="field">
+        <span>@L["Lozinka"]</span>
+        <input type="password" name="password" autocomplete="current-password" required @bind="password" />
+    </label>
+
+    @if (error is not null)
+    {
+        <div class="alert" role="alert">@error</div>
+    }
+
+    <button class="btn primary block" type="submit" disabled="@(busy || !Settings.IsConfigured)">
+        @(busy ? L["Prijava…"] : L["Prijavi se"])
+    </button>
+</form>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string? error;
+    private bool busy;
+
+    protected override void OnInitialized()
+    {
+        if (Auth.IsSignedIn) Nav.NavigateTo("", replace: true);
+    }
+
+    private async Task SubmitAsync()
+    {
+        busy = true;
+        error = null;
+        var (ok, message) = await Auth.SignInAsync(email, password);
+        busy = false;
+        if (ok) Nav.NavigateTo("", replace: true);
+        else error = message;
+    }
+}

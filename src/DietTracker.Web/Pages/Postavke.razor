@@ -1,0 +1,39 @@
+@page "/postavke"
+@inject AuthService Auth
+@inject ThemeService Theme
+
+<PageTitle>@L["Postavke"] · Ručak</PageTitle>
+
+<h1>@L["Postavke"]</h1>
+
+<section class="card stack">
+    <h2>@L["Tema"]</h2>
+    <div class="chips" role="radiogroup" aria-label="@L["Tema"]">
+        @foreach (var (value, label) in Options)
+        {
+            <button type="button" class="chip @(theme == value ? "active" : "")" role="radio"
+                    aria-checked="@(theme == value)" @onclick="() => SetTheme(value)">@L[label]</button>
+        }
+    </div>
+</section>
+
+<section class="card stack">
+    <h2>@L["Račun"]</h2>
+    <p class="muted">@L["Prijavljen/a kao"] <strong>@Auth.Email</strong></p>
+    <div><button class="btn" @onclick="Auth.SignOutAsync"><Icon Name="logout" /> @L["Odjava"]</button></div>
+</section>
+
+@code {
+    private static readonly (string Value, string Label)[] Options =
+        [("system", "Sustav"), ("light", "Svijetla"), ("dark", "Tamna")];
+
+    private string theme = "system";
+
+    protected override async Task OnInitializedAsync() => theme = await Theme.GetAsync();
+
+    private async Task SetTheme(string value)
+    {
+        theme = value;
+        await Theme.SetAsync(value);
+    }
+}

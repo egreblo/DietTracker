@@ -1,0 +1,133 @@
+@page "/jela"
+@inject RecipeService Recipes
+
+<PageTitle>@L["Jela"] · Ručak</PageTitle>
+
+<div class="page-head">
+    <h1>@L["Jela"]</h1>
+    <a class="btn primary" href="jela/novo"><Icon Name="plus" /> @L["Novo jelo"]</a>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert" role="alert">@error</div>
+}
+
+@if (all is null)
+{
+    <p class="muted">@L["Učitavanje…"]</p>
+}
+else if (all.Count == 0)
+{
+    <div class="empty">
+        <p>@L["Još nema jela. Dodaj prvo jelo pa ga stavi u skup iz kojeg se generira tjedan."]</p>
+        <a class="btn primary" href="jela/novo"><Icon Name="plus" /> @L["Novo jelo"]</a>
+    </div>
+}
+else
+{
+    <p class="muted">
+        @L["U skupu: {0} od {1}", PoolCount, all.Count]
+        @if (PoolCount < 7)
+        {
+            <span> · @L["Za tjedan bez ponavljanja treba barem 7 jela u skupu."]</span>
+        }
+    </p>
+
+    <div class="search">
+        <Icon Name="search" Size="18" />
+        <input type="search" placeholder="@L["Traži jelo ili sastojak"]" @bind="query" @bind:event="oninput" />
+    </div>
+
+    <div class="chips">
+        @foreach (var (value, label) in Filters)
+        {
+            <button type="button" class="chip @(filter == value ? "active" : "")" @onclick="() => filter = value">@L[label]</button>
+        }
+    </div>
+
+    <ul class="list">
+        @foreach (var r in Visible)
+        {
+            <li class="card recipe">
+                <a class="recipe-main" href="jela/@r.Id">
+                    <span class="recipe-name">@r.Name</span>
+                    <span class="recipe-meta">
+                        @if (r.Source == RecipeSource.Imported)
+                        {
+                            <span class="badge web">@L["S weba"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge">@L["Moje"]</span>
+                        }
+                        @if (r.Kcal is not null)
+                        {
+                            <span>@Fmt.Number(r.Kcal.Value) kcal</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(r.LinkUrl))
+                        {
+                            <Icon Name="link" Size="14" />
+                        }
+                    </span>
+                </a>
+                <label class="switch" title="@L["U skupu"]">
+                    <input type="checkbox" checked="@r.InPool" @onchange="e => TogglePool(r, (bool)e.Value!)" />
+                    <span class="track"></span>
+                    <span class="sr-only">@L["U skupu"]</span>
+                </label>
+            </li>
+        }
+    </ul>
+
+    @if (!Visible.Any())
+    {
+        <p class="muted">@L["Nema rezultata."]</p>
+    }
+}
+
+@code {
+    private static readonly (string Value, string Label)[] Filters =
+        [("all", "Sva"), ("pool", "U skupu"), ("manual", "Moja"), ("imported", "S weba")];
+
+    private List<Recipe>? all;
+    private string query = "";
+    private string filter = "all";
+    private string? error;
+
+    private int PoolCount => all?.Count(r => r.InPool) ?? 0;
+
+    private IEnumerable<Recipe> Visible => (all ?? []).Where(r =>
+        (filter switch
+        {
+            "pool" => r.InPool,
+            "manual" => r.Source == RecipeSource.Manual,
+            "imported" => r.Source == RecipeSource.Imported,
+            _ => true,
+        })
+        && Matches(r));
+
+    private bool Matches(Recipe r) =>
+        string.IsNullOrWhiteSpace(query)
+        || r.Name.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase)
+        || r.Ingredients.Any(i => i.Name.Contains(query.Trim(), StringComparison.CurrentCultureIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { all = await Recipes.GetAllAsync(force: true); }
+        catch (Exception ex) { error = ex.Message; all = []; }
+    }
+
+    private async Task TogglePool(Recipe recipe, bool inPool)
+    {
+        try
+        {
+            error = null;
+            await Recipes.SetPoolAsync(recipe, inPool);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

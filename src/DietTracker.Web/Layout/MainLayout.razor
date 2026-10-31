@@ -1,0 +1,38 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+@if (Auth.IsSignedIn)
+{
+    <div class="shell">
+        <header class="topbar no-print">
+            <a class="brand" href="">Ručak</a>
+            <ThemeToggle />
+        </header>
+        <nav class="tabs no-print" aria-label="@L["Glavna navigacija"]">
+            <NavLink href="" Match="NavLinkMatch.All"><Icon Name="calendar" /><span>@L["Tjedan"]</span></NavLink>
+            <NavLink href="jela"><Icon Name="book" /><span>@L["Jela"]</span></NavLink>
+            <NavLink href="postavke"><Icon Name="settings" /><span>@L["Postavke"]</span></NavLink>
+        </nav>
+        <main class="content">
+            @Body
+        </main>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Auth.Changed += OnAuthChanged;
+        if (!Auth.IsSignedIn) Nav.NavigateTo("login", replace: true);
+    }
+
+    private void OnAuthChanged()
+    {
+        if (!Auth.IsSignedIn) Nav.NavigateTo("login", replace: true);
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Auth.Changed -= OnAuthChanged;
+}
